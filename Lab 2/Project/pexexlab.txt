@@ -1,0 +1,40 @@
+gdb:
+
+Didn't know where to start, so I tried running plain gdb. Kept getting an error like "unknown file" or "file not specified". 
+
+gdb  ~eggert/bin64/bin/emacs-25.2:
+
+^Got to this once I realized plain gdb wasn't working. Website didn't specify to add the ~eggert... part to the command, but thankfully Uen Tao's slides did, and I managed to start my debugging.
+
+disas:
+
+I didn't know how to actually start looking into the code, so I started with disas. Didn't work; "no frame selected error".
+
+disas main:
+
+Although this produced results, it gave me way too many commands to look through, and most of them were not relevant to Ftimes.
+
+disas Ftimes:
+Gave me a dump of assembler code for Ftimes, but I didn't really know what to do with it. At this point I didn't have my program running, because I didn't realize that to step through the program you need to have it running. This command was just an attempt to get SOMETHING meaningful out of this.
+
+si:
+Did not work. "The program is not being run." Didn't know how to run the program, until I realized that you have to include this command after (gdb):  emacs -Q -batch -eval '(print (* 1250284240 -1844255039))'
+
+(gdb)  emacs -Q -batch -eval '(print (* 1250284240 -1844255039))':
+
+Initially gave me a long wall of text. I ignored that and entered my break point at Ftimes.
+
+set disassemble-next-line on:
+Allowed me to see upcoming assembly language commands, and also know which ones were just executed. Used the information provided with this command to fill up the first, second, and third columns of the trace.
+
+si:
+Now, after setting all the rest up, this command worked. It allowed me to progress step by step through the program, following each executed instruction until arith_driver returned. In tandem with set disassemble-next-line on, I could see each instruction and the relative breakdown of its address, its assembly code instruction, and the number of bytes that instruction was.
+
+info registers:
+Gave me a display of all the general purpose registers, so I could see exactly what values were in each. Used this to fill in the fourth column of the trace.
+
+x (address):
+When data was moved to the stack or to other memory locations, this command allowed me to see what was in those addresses. Sometimes I used a variation of the command (x\g) to see an expanded view of what was in the location - whenever I did this though, I had to reset it back to (x\w) to view information normally again. Again, used this to fill the fourth column of the trace.
+
+kill:
+I used this command when I wanted to end the program (usually when I had forgotten to inspect the registers in a step).

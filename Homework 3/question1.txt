@@ -1,0 +1,56 @@
+1A.
+Stack diagram:
+%rsp = -104
+0   -----------
+    | -unused-|
+    -----------
+...
+
+-72 -----------
+    |    z    |
+-80 -----------
+    |   &z    |
+-88 -----------
+    |    y    |
+-96 -----------
+    |    x    |
+-104-----------
+...
+
+B.
+-40
+
+C.
+The code for process accesses the elements of structure argument s by offsetting the stack pointer, and then copying these values into registers.
+
+D.
+The code for process sets the field for structure r by using %rdi as the beginning of that stack frame, and then offsetting the value of %rdi to hold the other fields of r.
+
+E.
+0   -----------
+    | -unused-|
+    -----------
+...
+-24 -----------
+    |    z    |
+-32 -----------
+    |    x    |
+-40 -----------
+    |    y    |
+-48 -----------
+...
+-72 -----------
+    |    z    |
+-80 -----------
+    |    &z   |
+-88 -----------
+    |    y    |
+-96 -----------
+    |    x    |
+-104-----------
+
+F.
+Structure values are passed as addresses in the stack frame; the way functions pass these values is by storing them in  registers, especially %rdi and the argument registers. To return structures, the function copies the return value (which is the location of the structure in the stack frame) into %rax.
+
+
+

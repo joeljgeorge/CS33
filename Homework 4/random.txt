@@ -1,0 +1,8 @@
+2.89A. True, since double has greater precision than int, and dx is just an int cast as a double, which is then cast back down to a float, this will equal (float) x, which is just an cast up to a float. Even if there is rounding, both will round to the same value. The underlying mathematical principle is simply that a number is equal to itself.
+
+B. False, because if x - y overflows, it will wrap around before being converted to a double. However, dx - dy will not overflow, because if they final value is 33 or more (as long as its under 53) bits long, a double can store that value. Consider the case of x = TMin and y = TMin. (double)(x - y) would yield a double of value 0, while dx - dy would have a value of -4294967296.
+C.True, because dx, dy, and dz all have integer values (32 bits of significant value) before any arithmetic is performed. Thus, if any overflow occurs, at most the value will have 34 significant bits, which is well within the fraction capacity of a double. Thus, this will always equal true. The underlying mathematical principle is the associatitivity of addition.
+
+D. False, due to potential rounding errors. Consider the case of x = 2^31 + 1, y = x, and z = 2^31 + 2^4. Because of rounding to even, the left hand side would not equal the right hand side.
+
+E. False; consider the case of x = 0. Thus, dx/dx would be NaN, while dz/dz could be 1. NaN is not equal to 1. 

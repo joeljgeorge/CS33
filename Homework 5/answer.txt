@@ -1,0 +1,8 @@
+12.18.
+A. Unsafe trajectory
+B. Safe trajectory
+C. Unsafe trajectory
+
+12.24.
+Not necessarily; these functions, as displayed on page 899, seem implicitly reentrant, meaning that they will only be reentrant if the pointers passed into those functions are not pointing to shared data. 
+

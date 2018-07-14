@@ -1,0 +1,20 @@
+1A.
+x is stored in register %rdi, but during runtime it gets stored in register %r8 in line 7 of the assembly code.
+n is stored in register %esi, and is then moved to  %ecx in line 1.
+result is stored in register %rax.
+mask is stored in register %rdx.
+
+B.
+Result has an initial value of 0. Mask has an initial value of 1. 
+
+C.
+The test condition for mask is (mask != 0), which is represented by lines 12 and 13 in the assembly code.
+
+D.
+Mask gets updated by being left shifted by the value represented by the lower 8 bits of n; this is represented by line 10 in the assembly code.
+
+E.
+Result gets updated by (result |= (x & mask)), which is represented by line 9 in the assembly code.
+
+F.
+//done in long.c

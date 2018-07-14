@@ -1,0 +1,79 @@
+Downloading file:
+
+I downloaded the tarball file to my local machine, and then moved it over to the linux server using WinSCP. In Putty, I used the command tar -xvzf community_images.tar.gz to unzip the tarball.
+
+Optimizing code:
+
+First, I compiled and ran the regular code to get a feel for what this program was. I used make clean (not required, just force of habit), make seq, and ./seq to accomplish this. The output was something like this (actual values were subject to change):
+
+FUNC TIME : 0.743027
+TOTAL TIME : 2.527269
+
+Seeing that the speedup goal is 3.5, I knew that I had to gun for a function time of at least 0.75/3.5 = 0.214 (approximately). I used Uen Tao's slides to familiarize myself with the relevant OpenMP commands, and then got to work.
+
+I used make clean to clear away all executables and output files, and then compiled seq using make seq GPROF=1. Then, I ran ./seq, and then after that used gprof seq|less to see which functions were the bottleneck. The output was:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total
+ time   seconds   seconds    calls  ms/call  ms/call  name
+ 73.59      0.61     0.61       15    40.72    42.50  func1
+ 16.89      0.75     0.14  5177344     0.00     0.00  rand2
+  2.41      0.77     0.02   491520     0.00     0.00  findIndexBin
+  2.41      0.79     0.02        1    20.03   133.60  addSeed
+  1.21      0.80     0.01        2     5.01     5.01  init
+  1.21      0.81     0.01        1    10.01    10.01  imdilateDisk
+  1.21      0.82     0.01                             filter
+  1.21      0.83     0.01                             sequence
+  0.00      0.83     0.00   983042     0.00     0.00  round
+  0.00      0.83     0.00       16     0.00     0.00  dilateMatrix
+  0.00      0.83     0.00       15     0.00     0.00  func2
+  0.00      0.83     0.00       15     0.00     0.00  func3
+  0.00      0.83     0.00       15     0.00     0.00  func4
+  0.00      0.83     0.00       15     0.00     1.34  func5
+  0.00      0.83     0.00       15     0.00     0.00  rand1
+
+Clearly, func1 was the bottleneck. I then opened up func.c and starting playing around with the nested for loop:
+
+ for(i = 0; i<n; i++){
+                for(j = 0; j < Ones; j++){
+                        index_X = round(arrayX[i]) + objxy[j*2 + 1];
+                        index_Y = round(arrayY[i]) + objxy[j*2];
+                        index[i*Ones + j] = fabs(index_X*Y*Z + index_Y*Z + iter);
+                        if(index[i*Ones + j] >= max_size)
+                                index[i*Ones + j] = 0;
+                }
+                probability[i] = 0;
+
+                for(j = 0; j < Ones; j++) {
+                        probability[i] += (pow((array[index[i*Ones + j]] - 100),2) -
+                                                          pow((array[index[i*Ones + j]]-228),2))/50.0;
+                }
+                probability[i] = probability[i]/((double) Ones);
+}
+
+I observed which variables were both being altered AND posed a threat to correct behavior in a multi-threaded OpenMP environment. Because the OpenMP work-sharing structure for loops operates such a way that each thread handles an iteration of loop (thread 1 deals with the loop when i = 1, thread 2 deals with the loop when i = 2, etc. => source: https://en.wikipedia.org/wiki/OpenMP), I concluded that array accesses like probability[i] would not be too problematic (threads would not try to write to the same location at once, because they are all accessing different position in the array [i values are unique for each thread]). Therefore, I didn't specify arrays in my OpenMP clauses. However, I did note that j, index_X, and index_Y are variables that are shared across threads, which could be disastrous, because threads would be changing the values in an unchecked manner. Therefore, I included these variables in my private clause of my OpenMP declaration:
+
+omp_set_num_threads(16);
+#pragma omp parallel for private(index_X, index_Y, j)
+        for(i = 0; i<n; i++){
+	      ...
+I did not set them as firstprivate because all of these variables get their values from the inside of the loop; even though index_X and index_Y are arguments, they are reassigned immediately in the first inner loop. j is also dealt with in a similar manner. Therefore, I just left them as private. I chose 16 for my thread number because I was fiddling around and found 16 to be one of the more optimal numbers. If thread numbers were too low (lower than 12) they resulted in very little speedup, at least when I ran it. Then again, while I was testing the smaller thread numbers, there could've been a lot of server activity, so it's hard to state that conclusively. At least with decent server activity, 16 threads held up fairly well. Creating more threads than that also resulted in less speedup. Therefore, I settled on 16 as my thread count for most of my OpenMP declarations.
+
+I repeated this process of parallelizing loops for the other loops in func1, and then I started doing this with the other loops in the other functions. However, I ran out of time to do parallelize all of them (because I have a final to study for!). One thing I did notice was that there was room for more subtle optimizations (i.e. combining loops, taking repeated arithmetic operations like w[i] * 2 and making that a set variable) that could've been implemented if I had more time to do so. I did a bit of this in func2, where I combined the first two loops together, and used the reduction clause to account for sumWeights.
+
+Testing:
+
+As I was optimizing my code, I would recompile omp after every parallelization, and run it against seq. For some reason, I decided it'd be helpful to create a seperate source file for seq, one that didn't have all of the OpenMP modifications, so I created one called func2.c, and went into the Makefile to change:
+SRC = filter.c
+SRCS = $(SRC) main.c func.c util.c
+ 
+to: 
+ 
+SRC = func.c
+SRCS = $(SRC) main.c filter.c util.c
+
+Once this was done, I recompiled seq with make seq SRC=func2.c and ran my tests again. For the most part, my optimized code had a runtime of around 0.10 seconds, which is around a 7.5x speedup (0.75/0.10)! Once I was satisfied with my speedup, I ran make check to make sure that my output was correct. After confirming that my output was correct, I recompiled omp with make omp MTRACE=1, and then ran make checkmem to make sure there were no memory leaks. Apparently, make checkmem is buggy, and so I just made sure there was nothing else printed other than Memory not freed: *a bunch of addresses*. Since I didn't use malloc in my code, I'm not too worried.
+
+Interesting takeaways:
+
+I was incredibly vexed during this project because for some reason, even when I had 16 threads enabled, I would get a neglible speedup (sometimes my "optimized" code was slower than seq!). To change things up, I switched over to server 07, which had MUCH less traffic (used ps auxwww | grep sshd to check this), and my code worked normally. The server traffic really makes a difference!

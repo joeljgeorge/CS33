@@ -1,0 +1,20 @@
+1. There are two major sources of error in this code. First, rbp does actually contain the right mathematical value. However, when this value is getting passed in to rax, leaq0x2(,rbp, 4) left  shifts off the two most significant digits and then adds the value 2 to this. rax, being the return value, means that Ftimes returns a very wrong value. Secondly, and most interesting, this rax value isn't even shown on the screen. This means that what actually controls what is displayed is not Ftimes, but rather some auxilary function that receives the value in rdi. The reason I say this is because a) rdi holds the correct mathematical value (the same value in rbp) AND, given Emacs reading system, represents the value displayed on the screen. Since Elisp reads the first two (most sig bits) as the "tag" of the value, those two bits are effectively set to 0, rendering the incorrectly positive number that we see on the screen. If Emacs was to find a different "tagging" system, which did not interfere with the bit pattern of the number, we would find that the correct number is displayed each time. 
+
+2."most-negative-fixnum" is defined as "the smallest value that is representable in a Lisp integer", in line 3732 of data.c. The way this is done is by linking that constant string to a value called Vmost_negative_fixnum. Vmost_negative_fixnum is set to the value printed on the screen by:
+
+Vmost_negative_fixnum = make_number(MOST_NEGATIVE_FIXNUM); (line 3734, data.c)
+
+make_number is a function defined in lisp.h. The function  essentially just returns the value shifted to the left by 2, then added to by 2, and then cast to a signed integer and turned into a Lisp_Object. MOST_NEGATIVE_FIXNUM is defined in line 831 of lisp.h as -1 - MOST_POSITIVE_FIXNUM. MOST_POSITIVE_FIXNUM is set as EMACS_INT_MAX >> INTTYPEBITS, or LLONG_MAX (defined in climits.h) >> (GCTYPEBITS - 1 == 2). Given this information, evaluating the binary bit sequence (according to the Lisp interpreter, so keep in mind the tagging system!) will result in the number printed to the screen.
+
+3. The final value of rdi, after the 4 multiplications, is 0x8000000000000001. This value arises due to overflow. Now, when Elisp interprets this value, it reads the most significant bits as a tag and shifts them off, leaving us with 0x0000000000000004. This should, left as it is, should be read as 4. However, in the final interpetation of the value, Elisp left shifts it back by 2 as well, rendering 0x0000000000000001, or 1.
+
+4.Although this is compiled differently, Emacs would not run any differently - wrapping would not make Emacs encounter any problems, because arith_driver does not depend on the fact that wrapping does not occur. Even the overflow variables that were created in arith_driver would still work as required, because they rely on the fact that the overflow flag is set when there is an overflow in arithmetic - fwrapv does not stop this from happening, it only makes sure that the undefined behavior that would follow this does not also occur. 
+
+5. On a very high level, the program is crashing when emacs_setenv_TZ calls strcpy. The crash is due to the fact that the program is trying to access (read or write) into memory that it is not allowed to. Speaking in terms of low-level, this problematic action is committed by the following command:
+
+movdqu %xmm7,-0x10(%rdi) 
+
+This command moves 128 bits into a memory location that is half that size (all memory slots on the stack in x64 are 64 bits). This induces causes memory in surrounding locations to be overwritten; these locations should not be overwritten, but they are because of this erroneous command. This bad memory access can overwrite read-only parts of the memory, causing bad access errors and crashing the program. 
+
+Even without analyzing the assembly code, the source code seems very risky, because it entails writing to a string literal (char *tzval) - since string literals are stored in read-only memory, any edits made to these can crash or at least halt the program. 
+

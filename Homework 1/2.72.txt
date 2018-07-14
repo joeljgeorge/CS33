@@ -1,0 +1,2 @@
+72A. Signed value, maxbytes, is converted to unsigned value, and so when the subtraction is performed, the value is left unsigned, and thus always positive.
+  B. (maxbytes - (int)sizeof(val)>= 0)
